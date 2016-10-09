@@ -1,0 +1,68 @@
+#!/usr/bin/python
+# -*- encoding: utf-8; py-indent-offset: 4 -*-
+# +------------------------------------------------------------------+
+# |             ____ _               _        __  __ _  __           |
+# |            / ___| |__   ___  ___| | __   |  \/  | |/ /           |
+# |           | |   | '_ \ / _ \/ __| |/ /   | |\/| | ' /            |
+# |           | |___| | | |  __/ (__|   <    | |  | | . \            |
+# |            \____|_| |_|\___|\___|_|\_\___|_|  |_|_|\_\           |
+# |                                                                  |
+# | Copyright Mathias Kettner 2012             mk@mathias-kettner.de |
+# +------------------------------------------------------------------+
+#
+# This file is part of Check_MK.
+# The official homepage is at http://mathias-kettner.de/check_mk.
+#
+# check_mk is free software;  you can redistribute it and/or modify it
+# under the  terms of the  GNU General Public License  as published by
+# the Free Software Foundation in version 2.  check_mk is  distributed
+# in the hope that it will be useful, but WITHOUT ANY WARRANTY;  with-
+# out even the implied warranty of  MERCHANTABILITY  or  FITNESS FOR A
+# PARTICULAR PURPOSE. See the  GNU General Public License for more de-
+# ails.  You should have  received  a copy of the  GNU  General Public
+# License along with GNU Make; see the file  COPYING.  If  not,  write
+# to the Free Software Foundation, Inc., 51 Franklin St,  Fifth Floor,
+# Boston, MA 02110-1301 USA.
+
+# Author: Jeremy Leggat <jleggat@asu.edu>
+# --------------------------------------------------------------------------------
+# 1. Promise vtrak Temp Sensor status
+
+factory_settings["vtrak_temp_default_levels"] = {
+    "allowed_status" : ["normal"],
+    "warn_temp"      : "40",
+    "crit_temp"      : "60",
+}
+
+def inventory_vtrak_temp(checkname, info):
+  return [(line[0], {}) for line in info]
+
+def check_vtrak_temp(item, params, info):
+  vtinfo = (line for line in info if line[0] == item)
+  chk_info = vtinfo.next()
+
+  temperature = chk_info[1]
+  status = chk_info[2]
+  perfdata = [ ( "Temperature", saveint(temperature), saveint(params["warn_temp"]), saveint(params["crit_temp"]),0,100) ]
+  if status in params["allowed_status"]:
+    return (0, "OK - %s at %sC" % (status, temperature), perfdata)
+  else:
+    return (2, "CRITICAL - %s at %sC" % (status, temperature), perfdata)
+  return (3, "UNKNOWN - %s info not found" % item)
+
+check_info["vtrak_temp"] = {
+    "inventory_function"       : inventory_vtrak_temp,
+    "check_function"           : check_vtrak_temp,
+    "has_perfdata"             : True,
+    "service_description"      : "TempSensor %s",
+    "default_levels_variable"  : "vtrak_temp_default_levels",
+}
+
+snmp_info["vtrak_temp"] = \
+	( ".1.3.6.1.4.1.7933.1.20.1.13.1", [
+		"1",	# raidv4TempSensorIndex
+		"2",	# raidv4TempSensorTemperature
+		"3", 	# raidv4TempSensorStatus
+	] )
+snmp_scan_functions['vtrak_temp'] = \
+    lambda oid: oid(".1.3.6.1.2.1.1.2.0").startswith(".1.3.6.1.4.1.7933.1.10")

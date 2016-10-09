@@ -1,0 +1,74 @@
+#!/usr/bin/python
+# -*- encoding: utf-8; py-indent-offset: 4 -*-
+# +------------------------------------------------------------------+
+# |             ____ _               _        __  __ _  __           |
+# |            / ___| |__   ___  ___| | __   |  \/  | |/ /           |
+# |           | |   | '_ \ / _ \/ __| |/ /   | |\/| | ' /            |
+# |           | |___| | | |  __/ (__|   <    | |  | | . \            |
+# |            \____|_| |_|\___|\___|_|\_\___|_|  |_|_|\_\           |
+# |                                                                  |
+# | Copyright Mathias Kettner 2012             mk@mathias-kettner.de |
+# +------------------------------------------------------------------+
+#
+# This file is part of Check_MK.
+# The official homepage is at http://mathias-kettner.de/check_mk.
+#
+# check_mk is free software;  you can redistribute it and/or modify it
+# under the  terms of the  GNU General Public License  as published by
+# the Free Software Foundation in version 2.  check_mk is  distributed
+# in the hope that it will be useful, but WITHOUT ANY WARRANTY;  with-
+# out even the implied warranty of  MERCHANTABILITY  or  FITNESS FOR A
+# PARTICULAR PURPOSE. See the  GNU General Public License for more de-
+# ails.  You should have  received  a copy of the  GNU  General Public
+# License along with GNU Make; see the file  COPYING.  If  not,  write
+# to the Free Software Foundation, Inc., 51 Franklin St,  Fifth Floor,
+# Boston, MA 02110-1301 USA.
+
+# Author: Jeremy Leggat <jleggat@asu.edu>
+# --------------------------------------------------------------------------------
+# 1. Fibre Channel Module unit info
+# Polls the .1.3.6.1.2.1.75.1.1.4 oid, FIBRE-CHANNEL-FE-MIB::fcFeModuleTable
+# "A table that contains, one unit for each module in the Fabric Element, information of the modules."
+
+factory_settings["fc_unit_default_levels"] = {
+    "allowed_states" : [ "online" ],
+    "warn_states"    : [ "testing" ],
+}
+
+fc_unit_status = { '1': "online", '2': "offline", '3': "testing", '4': "faulty" }
+
+def inventory_fc_unit(checkname, info):
+    return [("%d" % (info.index(line) + 1),{}) for line in info]
+
+def check_fc_unit(item, params, info):
+    uid = int(item)
+    sys_info = (line for line in info if info.index(line) + 1 == uid)
+    unit = sys_info.next()
+
+    status = fc_unit_status[unit[1]]
+    msg_text = "%s %s - %s ports" % (unit[0], status, unit[2])
+    if status in params["allowed_states"]:
+        return (0, "OK - %s" % msg_text)
+    elif status in params["warn_states"]:
+        return (1, "WARNING - %s" % msg_text)
+    else:
+        return (2, "CRITICAL - %s" % msg_text)
+    return (3, "UNKNOWN - System info not found")
+
+check_info["fc_unit"] = {
+    "inventory_function"       : inventory_fc_unit,
+    "check_function"           : check_fc_unit,
+    "has_perfdata"             : False,
+    "service_description"      : "FC Chasis %s",
+    "default_levels_variable"  : "fc_unit_default_levels",
+}
+
+snmp_info["fc_unit"] = \
+    ( ".1.3.6.1.2.1.75.1.1.4.1", [
+        "2",    # fcFeModuleDescr
+        "4",    # fcFeModuleOperStatus  Values: online(1), offline(2), testing(3), faulty(4)
+        "6",    # fcFeModuleFxPortCapacity
+    ] )
+
+snmp_scan_functions['fc_unit'] = \
+    lambda oid: oid(".1.3.6.1.2.1.75.1.1.1.0") != None
